@@ -1,0 +1,66 @@
+name: Fork Build
+
+# The upstream CI only runs on pull_request against upstream's master, and
+# resolves its builder image from github.repository_owner, which does not exist
+# for a fork. This builds the same way on a fork branch, using upstream's
+# builder image, which is publicly pullable.
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - 'feature/**'
+      - 'fix/**'
+
+permissions: read-all
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Init the submodules the build actually needs
+        # Not --recursive: references/* is documentation only, and pulling it
+        # roughly triples checkout time for nothing.
+        run: |
+          git submodule update --init --depth 1 \
+            library/borealis \
+            library/chiaki-ng \
+            library/curl-libnx \
+            library/tomlplusplus \
+            library/switch-wireguard \
+            library/lwip \
+            library/ffmpeg \
+            library/uam
+          echo "borealis is at: $(git -C library/borealis rev-parse HEAD)"
+          echo "logger guard present: $(grep -c resolveLogOutput library/borealis/library/include/borealis/core/logger.hpp)"
+
+      - name: Build Akira
+        run: |
+          docker run --rm \
+            -v "${{ github.workspace }}:/build" \
+            -w /build \
+            ghcr.io/xlanor/akira-builder:latest \
+            bash -c "
+              set -e
+              git config --global --add safe.directory '*'
+              chmod +x /build/scripts/build-docker.sh
+              /build/scripts/build-docker.sh
+            "
+
+      - name: Upload NRO
+        uses: actions/upload-artifact@v4
+        with:
+          name: akira-nro
+          path: build/akira.nro
+
+      - name: Upload ELF (debug symbols, for symbolicating crash reports)
+        uses: actions/upload-artifact@v4
+        with:
+          name: akira-elf
+          path: build/akira.elf
