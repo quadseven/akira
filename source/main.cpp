@@ -16,6 +16,7 @@
 #include <chiaki/log.h>
 #include <curl/curl.h>
 #include "crypto/libnx/gmac.h"
+#include "core/otlp_log_exporter.hpp"
 
 #include "views/host_list_tab.hpp"
 #include "views/settings_tab.hpp"
@@ -268,6 +269,14 @@ int main(int argc, char* argv[])
     });
     brls::Logger::info("Async logging enabled via thread pool");
 
+    // Opt in only: does nothing unless sdmc:/switch/akira/otel-endpoint exists.
+    // Started after async logging is on so the exporter sees the same records
+    // the flusher does.
+    if (OtlpLogExporter::instance().start("sdmc:/switch/akira")) {
+        brls::Logger::info("OTLP log export enabled, endpoint {}",
+                           OtlpLogExporter::instance().endpoint());
+    }
+
     chiaki_libnx_set_ghash_mode(CHIAKI_LIBNX_GHASH_PMULL);
     brls::Logger::info("GHASH mode: PMULL");
 
@@ -311,6 +320,26 @@ int main(int argc, char* argv[])
     }
 
     brls::Logger::info("Application exiting");
+
+    // Report what the exporter did, and stop it before the app tears curl
+    // down. It cannot log for itself: it runs on a worker thread and borealis
+    // fires the log event under logMtx, so an exporter that logged its own
+    // failure would generate the record causing the next failure. Reading its
+    // counters here, from the main thread, is how a silent transport failure
+    // becomes visible at all.
+    if (OtlpLogExporter::instance().enabled()) {
+        const auto otlpStats = OtlpLogExporter::instance().stats();
+        brls::Logger::info("OTLP: accepted={} sent={} droppedFailed={} "
+                           "droppedOverflow={} postFailures={}",
+                           otlpStats.accepted, otlpStats.sent,
+                           otlpStats.droppedFailed, otlpStats.droppedOverflow,
+                           otlpStats.postFailures);
+        const std::string otlpError = OtlpLogExporter::instance().lastError();
+        if (!otlpError.empty()) {
+            brls::Logger::error("OTLP: last transport error: {}", otlpError);
+        }
+    }
+    OtlpLogExporter::instance().stop();
 
     SDL_Quit();
     curl_global_cleanup();

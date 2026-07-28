@@ -1,6 +1,6 @@
 [submodule "library/borealis"]
 	path = library/borealis
-	url = git@github.com:xlanor/borealis.git
+	url = https://github.com/quadseven/borealis.git
 [submodule "library/chiaki-ng"]
 	path = library/chiaki-ng
 	url = https://github.com/xlanor/chiaki-ng.git
@@ -20,16 +20,16 @@
 	url = https://github.com/dragonflylee/switchfin
 [submodule "references/moonlight-switch"]
 	path = references/moonlight-switch
-	url = git@github.com:XITRIX/Moonlight-Switch.git
+	url = https://github.com/XITRIX/Moonlight-Switch.git
 [submodule "references/nxmp"]
 	path = references/nxmp
-	url = git@github.com:proconsule/nxmp.git
+	url = https://github.com/proconsule/nxmp.git
 [submodule "references/deko3d"]
 	path = references/deko3d
-	url = git@github.com:devkitPro/deko3d.git
+	url = https://github.com/devkitPro/deko3d.git
 [submodule "references/psn-api"]
 	path = references/psn-api
-	url = git@github.com:achievements-app/psn-api.git
+	url = https://github.com/achievements-app/psn-api.git
 [submodule "library/tomlplusplus"]
 	path = library/tomlplusplus
 	url = https://github.com/marzer/tomlplusplus.git
