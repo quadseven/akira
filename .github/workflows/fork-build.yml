@@ -25,10 +25,12 @@ jobs:
           fetch-depth: 0
 
       - name: Init the submodules the build actually needs
-        # Not --recursive: references/* is documentation only, and pulling it
-        # roughly triples checkout time for nothing.
+        # --recursive is required: chiaki-ng has nested submodules of its own
+        # (nanopb and friends) that its CMakeLists.txt add_subdirectory()s.
+        # Naming the paths explicitly still skips references/*, which is
+        # documentation only and roughly triples checkout time for nothing.
         run: |
-          git submodule update --init --depth 1 \
+          git submodule update --init --recursive --depth 1 \
             library/borealis \
             library/chiaki-ng \
             library/curl-libnx \
