@@ -24,6 +24,12 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Rewrite ssh submodule urls to https
+        # Nested .gitmodules files are not ours to edit: library/switch-wireguard
+        # has its own library/borealis pinned over git@github.com, which a CI
+        # runner with no ssh key cannot clone. This rewrite covers every level.
+        run: git config --global url."https://github.com/".insteadOf "git@github.com:"
+
       - name: Init the submodules the build actually needs
         # --recursive is required: chiaki-ng has nested submodules of its own
         # (nanopb and friends) that its CMakeLists.txt add_subdirectory()s.
