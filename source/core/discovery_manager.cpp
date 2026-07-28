@@ -371,6 +371,26 @@ void DiscoveryManager::lookupPsnAccountId(
         return;
     }
 
+    // A transport level success says nothing about the response. This
+    // endpoint returns 500 with an empty body when it is unwell, and
+    // without this check that surfaces as "Failed to parse JSON response",
+    // which sends people looking for a bug in their own setup.
+    long http_status = 0;
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_status);
+
+    if (http_status < 200 || http_status >= 300)
+    {
+        onError("Lookup service returned HTTP " + std::to_string(http_status) +
+                (response_data.empty() ? " with an empty body" : ""));
+        return;
+    }
+
+    if (response_data.empty())
+    {
+        onError("Lookup service returned an empty response");
+        return;
+    }
+
     struct json_object* parsed_json = json_tokener_parse(response_data.c_str());
 
     if (!parsed_json)
@@ -647,6 +667,26 @@ void DiscoveryManager::refreshPsnToken(
     if (res != CURLE_OK)
     {
         onError(curl_easy_strerror(res));
+        return;
+    }
+
+    // A transport level success says nothing about the response. This
+    // endpoint returns 500 with an empty body when it is unwell, and
+    // without this check that surfaces as "Failed to parse JSON response",
+    // which sends people looking for a bug in their own setup.
+    long http_status = 0;
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_status);
+
+    if (http_status < 200 || http_status >= 300)
+    {
+        onError("Lookup service returned HTTP " + std::to_string(http_status) +
+                (response_data.empty() ? " with an empty body" : ""));
+        return;
+    }
+
+    if (response_data.empty())
+    {
+        onError("Lookup service returned an empty response");
         return;
     }
 
