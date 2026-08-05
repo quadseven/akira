@@ -252,17 +252,7 @@ void OtlpLogExporter::stop() {
     curl_global_cleanup();
 }
 
-void OtlpLogExporter::onLogLine(brls::Logger::TimePoint when,
-                                brls::LogLevel level, const std::string& line) {
-    Record record;
-    record.timeUnixNano = static_cast<uint64_t>(
-        std::chrono::duration_cast<std::chrono::nanoseconds>(
-            when.time_since_epoch())
-            .count());
-    record.severityNumber = severityNumber(level);
-    record.severityText = severityText(level);
-    record.body = line;
-
+void OtlpLogExporter::enqueue(Record record) {
     bool overflowed = false;
 
     {
@@ -283,6 +273,41 @@ void OtlpLogExporter::onLogLine(brls::Logger::TimePoint when,
             m_stats.droppedOverflow++;
         }
     }
+}
+
+void OtlpLogExporter::onLogLine(brls::Logger::TimePoint when,
+                                brls::LogLevel level, const std::string& line) {
+    Record record;
+    record.timeUnixNano = static_cast<uint64_t>(
+        std::chrono::duration_cast<std::chrono::nanoseconds>(
+            when.time_since_epoch())
+            .count());
+    record.severityNumber = severityNumber(level);
+    record.severityText = severityText(level);
+    record.body = line;
+    enqueue(std::move(record));
+}
+
+void OtlpLogExporter::logRaw(const std::string& line, bool fromStderr) {
+    // Dropped rather than buffered when export is off, so a build with no
+    // endpoint pays nothing for having capture compiled in.
+    if (!m_enabled) {
+        return;
+    }
+
+    Record record;
+    record.timeUnixNano = static_cast<uint64_t>(
+        std::chrono::duration_cast<std::chrono::nanoseconds>(
+            std::chrono::system_clock::now().time_since_epoch())
+            .count());
+    // A raw write carries no severity. stderr is reported a step up because
+    // callers overwhelmingly use it for failures, but neither is a real level
+    // and log.source is what says where the line came from.
+    record.severityNumber = fromStderr ? 13 : 9;
+    record.severityText = fromStderr ? "WARN" : "INFO";
+    record.body = line;
+    record.source = fromStderr ? "stderr" : "stdout";
+    enqueue(std::move(record));
 }
 
 void OtlpLogExporter::worker() {
@@ -365,7 +390,15 @@ OtlpLogExporter::buildPayload(const std::deque<Record>& batch) const {
         out += record.severityText;
         out += "\",\"body\":{\"stringValue\":\"";
         appendEscaped(out, record.body);
-        out += "\"}}";
+        out += "\"}";
+        // Only raw writes carry a source. Emitting it unconditionally would
+        // put an empty attribute on every ordinary line for nothing.
+        if (!record.source.empty()) {
+            out += ",\"attributes\":[";
+            appendStringAttribute(out, "log.source", record.source);
+            out += "]";
+        }
+        out += "}";
     }
 
     out += "]}]}]}";

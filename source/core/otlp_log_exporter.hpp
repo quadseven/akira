@@ -42,6 +42,19 @@ class OtlpLogExporter {
     void stop();
 
     [[nodiscard]] bool enabled() const { return m_enabled; }
+
+    /**
+     * Buffers one line that did not come from brls::Logger.
+     *
+     * How StdoutCapture hands over raw writes to stdout and stderr. Not
+     * routed through brls::Logger on purpose: borealis writes the line to
+     * logOut before firing the event, logOut is stdout unless file logging
+     * is on, and the capture would feed itself. It also fires that event
+     * holding logMtx, so calling back into the logger would deadlock.
+     *
+     * Nothing this reaches may write to stdout or stderr.
+     */
+    void logRaw(const std::string& line, bool fromStderr);
     [[nodiscard]] std::string endpoint() const { return m_endpoint; }
 
     struct Stats {
@@ -72,7 +85,16 @@ class OtlpLogExporter {
         int severityNumber;
         const char* severityText;
         std::string body;
+        // Empty for anything from the borealis log event, which is the common
+        // case. "stdout" or "stderr" for a raw write picked up by
+        // StdoutCapture, emitted as a log.source attribute. chiaki and the
+        // libraries under it print rather than log, and none of that reaches
+        // brls::Logger.
+        std::string source;
     };
+
+    /** Shared tail of onLogLine and logRaw: bounded push plus stats. */
+    void enqueue(Record record);
 
     void onLogLine(brls::Logger::TimePoint when, brls::LogLevel level,
                    const std::string& line);

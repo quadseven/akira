@@ -17,6 +17,7 @@
 #include <curl/curl.h>
 #include "crypto/libnx/gmac.h"
 #include "core/otlp_log_exporter.hpp"
+#include "core/stdout_capture.hpp"
 
 #include "views/host_list_tab.hpp"
 #include "views/settings_tab.hpp"
@@ -275,6 +276,33 @@ int main(int argc, char* argv[])
     if (OtlpLogExporter::instance().start("sdmc:/switch/akira")) {
         brls::Logger::info("OTLP log export enabled, endpoint {}",
                            OtlpLogExporter::instance().endpoint());
+    }
+
+    // Everything printf writes, which is where chiaki and the libraries under
+    // it actually report. None of that goes through brls::Logger, so it is
+    // invisible on a console with no nxlink attached.
+    //
+    // borealis writes each line to logOut before firing the event the
+    // exporter subscribes to, and logOut is stdout unless file logging moved
+    // it. Capturing while that is true would export every log line twice, so
+    // if the capture was asked for and the user has not enabled file logging,
+    // open the log file here rather than quietly declining. Wanting the
+    // capture is a clearer signal than the settings toggle.
+    if (StdoutCapture::requested("sdmc:/switch/akira")) {
+        if (!logFile) {
+            const std::string logPath = SettingsManager::getLogFilePath();
+            if ((logFile = fopen(logPath.c_str(), "w"))) {
+                brls::Logger::setLogOutput(logFile);
+                brls::Logger::info(
+                    "stdout capture: moved borealis logging to {}", logPath);
+            }
+        }
+        if (!logFile) {
+            brls::Logger::warning(
+                "stdout capture skipped: borealis is still logging to stdout");
+        } else if (StdoutCapture::install("sdmc:/switch/akira")) {
+            brls::Logger::info("stdout and stderr are being captured to OTLP");
+        }
     }
 
     chiaki_libnx_set_ghash_mode(CHIAKI_LIBNX_GHASH_PMULL);
